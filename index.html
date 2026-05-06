@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classroom Arcade Fighter</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+<style>
+/* GLOBAL STYLES */
+body { margin:0; font-family: 'Arial', sans-serif; background:#0b0b0b; color:white; overflow:hidden; touch-action: manipulation; }
+
+/* REUSABLE ARCADE FONT CLASS */
+.retro-font { font-family: 'Press Start 2P', cursive; }
+
+/* MODALS & SCREENS */
+#intro, #winScreen, #settingsModal, #charSelect { 
+    position:fixed; inset:0; display:flex; flex-direction:column; 
+    justify-content:center; align-items:center; background:rgba(0,0,0,0.98); z-index: 110;
+}
+#charSelect, #settingsModal, #winScreen { display: none; }
+#settingsModal { justify-content: flex-start; padding-top: 30px; z-index: 120; }
+
+/* WRONG ANSWER SLIDE-DOWN BANNER */
+#wrongBanner {
+    position: fixed; top: -180px; left: 0; width: 100%; height: 140px;
+    background: linear-gradient(to bottom, #8b0000, #4a0000);
+    border-bottom: 5px solid #ffcc00;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    z-index: 200; transition: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    font-family: 'Press Start 2P', cursive;
+}
+#wrongBanner.show { top: 0; }
+#wrongBanner h2 { color: #ffcc00; margin: 0; font-size: 1.8rem; text-shadow: 2px 2px #000; }
+#wrongBanner p { color: white; margin: 15px 0 0 0; font-size: 0.9rem; }
+
+/* HUD - ARCADE STYLE */
+.header-ui { position: fixed; top: 0; width: 100%; height: 80px; z-index: 100; pointer-events: none; font-family: 'Press Start 2P', cursive; }
+.banner { 
+    position: absolute; top: 20px; padding: 12px 18px; 
+    background: rgba(0,0,0,0.8); border: 2px solid #ffcc00; 
+    border-radius: 5px; font-size: 12px; color: #ffcc00; pointer-events: auto;
+}
+.left-banner { left: 20px; border-left: 8px solid #3498db; }
+.right-banner { right: 20px; border-right: 8px solid #e74c3c; }
+#turnPrompt { position: absolute; top: 25px; left: 50%; transform: translateX(-50%); color: gold; font-size: 16px; text-shadow: 2px 2px black; text-align: center; width: 500px; }
+
+/* CHAR SELECT */
+.char-grid { display: grid; grid-template-columns: repeat(3, 150px); gap: 20px; margin-top: 20px; justify-content: center; }
+.char-card { width: 150px; height: 190px; background: #1a1a1a; border: 3px solid #444; border-radius: 12px; cursor: pointer; transition: 0.3s; display: flex; flex-direction: column; align-items: center; }
+.char-card p { font-family: 'Press Start 2P', cursive; font-size: 8px; margin-top: 8px; }
+.sprite-preview { width: 128px; height: 128px; background-repeat: no-repeat; background-position: 0 0; image-rendering: pixelated; margin-top: 10px; }
+.active-select-p1 { border-color: #3498db !important; transform: scale(1.1); box-shadow: 0 0 25px #3498db; background: #0d1a26; }
+.active-select-p2 { border-color: #e74c3c !important; transform: scale(1.1); box-shadow: 0 0 25px #e74c3c; background: #260d0d; }
+
+/* ARENA */
+#arena { display:flex; height:60vh; width: 100%; background-image: url("images/background.png"); background-size: cover; background-position: center; position: relative; background-color: #1a1a1a; justify-content: center; align-items: flex-end; }
+.side { flex:1; position:relative; display:flex; justify-content:center; align-items: flex-end; padding-bottom: 20px; z-index: 2; }
+.hpContainer { position:absolute; top:80px; width:250px; z-index: 10; }
+.bar { height:22px; border-radius:6px; border:3px solid white; background:#333; overflow:hidden; }
+.health { height:100%; width:100%; transition: 0.4s; background: #2ecc71; }
+.low-health { animation: danger-pulse 0.5s infinite; }
+@keyframes danger-pulse { 0% { filter: brightness(1); } 50% { filter: brightness(1.5); } 100% { filter: brightness(1); } }
+
+canvas { width:320px; height:320px; } 
+
+/* UI & QUESTIONS - CLEAR FONT */
+#ui { 
+    position:fixed; bottom:0; left:0; right:0; height: 40vh; 
+    background:rgba(0,0,0,0.95); padding: 20px; border-top: 6px solid #ffcc00; 
+    display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; 
+}
+#question { 
+    font-size: 28px; font-weight: bold; line-height: 1.4; 
+    margin-bottom: 25px; color: #fff; text-align: center; 
+    max-width: 85%; text-shadow: 2px 2px #000;
+}
+#choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; width: 100%; }
+#choices button { 
+    min-width: 200px; padding: 18px 30px; 
+    font-size: 22px; font-weight: bold; cursor: pointer; 
+    background: #222; color: #ffcc00; border: 3px solid #ffcc00; 
+    border-radius: 12px; transition: 0.2s; 
+}
+#choices button:hover:not(:disabled) { background: #ffcc00; color: #000; transform: translateY(-3px); }
+
+/* MISC BUTTONS */
+.btn { 
+    font-family: 'Press Start 2P', cursive; padding: 15px 25px; font-size: 12px; 
+    cursor: pointer; background: #222; color: #ffcc00; border: 2px solid #ffcc00; border-radius: 5px; 
+}
+
+/* TITLE SCREEN */
+#intro h1 { font-family: 'Press Start 2P', cursive; font-size: 3rem; line-height: 1.2; text-shadow: 6px 6px #e74c3c; margin-bottom: 40px; text-align: center; }
+
+/* EDITOR UI */
+#qList { width: 95%; max-width: 700px; max-height: 60vh; overflow-y: auto; background: #111; padding: 20px; border: 2px solid #444; border-radius: 10px; }
+.q-item { background: #222; padding: 15px; margin-bottom: 20px; border-left: 5px solid #ffcc00; position: relative; border-radius: 5px; color: #ccc; }
+.q-item input { display: block; width: 90%; background: #333; color: white; border: 1px solid #555; padding: 10px; border-radius: 4px; font-size: 16px; margin-top: 5px; }
+.field-group label { font-size: 10px; color: #888; font-family: 'Press Start 2P', cursive; }
+
+/* NEW DELETE BUTTON STYLE */
+.delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    z-index: 5;
+}
+.delete-btn:hover { background: #ff0000; }
+</style>
+</head>
+<body>
+
+<audio id="bgm" loop><source src="audio/bgm.mp3"></audio>
+<audio id="punch"><source src="audio/punch.mp3"></audio>
+<audio id="ko"><source src="audio/ko.mp3"></audio>
+
+<div class="header-ui">
+    <div class="banner left-banner">P1</div>
+    <div id="turnPrompt">READY?</div>
+    <div class="banner right-banner">P2</div>
+</div>
+
+<div id="wrongBanner">
+    <h2>INCORRECT!</h2>
+    <p id="wrongSubtext">PLAYER LOSES THEIR TURN</p>
+</div>
+
+<div id="charSelect">
+    <h1 id="selectTitle" class="retro-font" style="color:#3498db; font-size: 1.2rem; margin-bottom: 20px;">P1: SELECT FIGHTER</h1>
+    <div class="char-grid">
+        <div class="char-card" id="card-p1" onclick="performSelection('p1')"><div class="sprite-preview" style="background-image: url('images/p1_idle.png');"></div><p>FIGHTER 1</p></div>
+        <div class="char-card" id="card-p2" onclick="performSelection('p2')"><div class="sprite-preview" style="background-image: url('images/p2_idle.png');"></div><p>FIGHTER 2</p></div>
+        <div class="char-card" id="card-p3" onclick="performSelection('p3')"><div class="sprite-preview" style="background-image: url('images/p3_idle.png');"></div><p>FIGHTER 3</p></div>
+        <div class="char-card" id="card-p4" onclick="performSelection('p4')"><div class="sprite-preview" style="background-image: url('images/p4_idle.png');"></div><p>FIGHTER 4</p></div>
+        <div class="char-card" id="card-p5" onclick="performSelection('p5')"><div class="sprite-preview" style="background-image: url('images/p5_idle.png');"></div><p>FIGHTER 5</p></div>
+        <div class="char-card" id="card-p6" onclick="performSelection('p6')"><div class="sprite-preview" style="background-image: url('images/p6_idle.png');"></div><p>FIGHTER 6</p></div>
+    </div>
+</div>
+
+<div id="intro">
+    <h1>CLASSROOM<br>FIGHTER</h1>
+    <div style="display: flex; gap: 20px;">
+        <button class="btn" onclick="showSelection()">START BATTLE</button>
+        <button class="btn" style="border-color: #95a5a6; color: #bdc3c7;" onclick="openEditor()">SETTINGS</button>
+    </div>
+</div>
+
+<div id="settingsModal">
+    <h2 class="retro-font" style="color:#ffcc00; font-size: 1rem; margin-bottom: 20px;">Question Editor</h2>
+    <div id="qList"></div>
+    <div style="display:flex; gap:15px; margin-top:20px;">
+        <button class="btn" onclick="addNewQuestion()">+ ADD QUESTION</button>
+        <button class="btn" style="background:#27ae60; color:white; border-color:#2ecc71;" onclick="saveQuestions()">SAVE & EXIT</button>
+    </div>
+</div>
+
+<div id="winScreen">
+    <h1 id="winnerText" class="retro-font" style="color:#ffcc00; font-size: 2.5rem; margin-bottom: 30px;">WINNER!</h1>
+    <button class="btn" onclick="location.reload()">REMATCH</button>
+</div>
+
+<div id="arena">
+    <div class="side">
+        <div class="hpContainer"><div class="bar"><div id="p1Health" class="health"></div></div></div>
+        <canvas id="p1Canvas" width="320" height="320"></canvas>
+    </div>
+    <div class="side">
+        <div class="hpContainer"><div class="bar"><div id="p2Health" class="health"></div></div></div>
+        <canvas id="p2Canvas" width="320" height="320"></canvas>
+    </div>
+</div>
+
+<div id="ui">
+    <div id="question">Preparing Battle...</div>
+    <div id="choices">
+        <button id="btn0" onclick="handleChoice(0)">-</button>
+        <button id="btn1" onclick="handleChoice(1)">-</button>
+        <button id="btn2" onclick="handleChoice(2)">-</button>
+    </div>
+</div>
+
+<script>
+const bgm=document.getElementById("bgm"), punch=document.getElementById("punch"), ko=document.getElementById("ko");
+let qIdx=0, turn=1, p1HP=100, p2HP=100, isGameOver=false, correctIdx=0, isLocked=false;
+let p1Choice = "", p2Choice = "", fighter1, fighter2;
+
+let questions = JSON.parse(localStorage.getItem('fighter_questions')) || [
+    {q:"I treat people who are sick in a hospital", a:"doctor", o1:"chef", o2:"pilot"},
+    {q:"I teach students in a classroom", a:"teacher", o1:"pilot", o2:"farmer"},
+    {q:"I use water to put out dangerous fires", a:"firefighter", o1:"police", o2:"chef"}
+];
+
+function shuffleQuestions(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+shuffleQuestions(questions);
+
+function triggerWrongBanner() {
+    const banner = document.getElementById("wrongBanner");
+    document.getElementById("wrongSubtext").innerText = `PLAYER ${turn} LOSES THEIR TURN!`;
+    banner.classList.add("show");
+    setTimeout(() => {
+        banner.classList.remove("show");
+        turn = turn === 1 ? 2 : 1;
+        updateHUD();
+        loadQuestion();
+    }, 2000);
+}
+
+function openEditor() {
+    document.getElementById("intro").style.display = "none";
+    document.getElementById("settingsModal").style.display = "flex";
+    renderEditor();
+}
+
+function renderEditor() {
+    const list = document.getElementById("qList");
+    list.innerHTML = "";
+    questions.forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = "q-item";
+        div.innerHTML = `
+            <button class="delete-btn" onclick="deleteQuestion(${idx})">X</button>
+            <div class="field-group"><label>Question</label>
+                <input type="text" value="${item.q}" oninput="questions[${idx}].q=this.value"></div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+                <div class="field-group"><label>Correct</label><input type="text" value="${item.a}" oninput="questions[${idx}].a=this.value"></div>
+                <div class="field-group"><label>Wrong 1</label><input type="text" value="${item.o1}" oninput="questions[${idx}].o1=this.value"></div>
+                <div class="field-group"><label>Wrong 2</label><input type="text" value="${item.o2}" oninput="questions[${idx}].o2=this.value"></div>
+            </div>`;
+        list.appendChild(div);
+    });
+}
+
+function addNewQuestion(){ 
+    questions.push({q:"",a:"",o1:"",o2:""}); 
+    renderEditor(); 
+    // Scroll to bottom so user sees the new item
+    const qList = document.getElementById("qList");
+    qList.scrollTop = qList.scrollHeight;
+}
+
+function deleteQuestion(index) {
+    if (questions.length <= 1) {
+        alert("Action Denied: You must have at least one question to play.");
+        return;
+    }
+    if (confirm("Are you sure you want to delete this question?")) {
+        questions.splice(index, 1);
+        renderEditor();
+    }
+}
+
+function saveQuestions(){ 
+    localStorage.setItem('fighter_questions', JSON.stringify(questions)); 
+    location.reload(); 
+}
+
+function showSelection() {
+    document.getElementById("intro").style.display = "none";
+    document.getElementById("charSelect").style.display = "flex";
+}
+
+function performSelection(charId) {
+    if(p1Choice === charId || p2Choice === charId || isLocked) return;
+    if(!p1Choice) {
+        p1Choice = charId;
+        document.getElementById(`card-${charId}`).classList.add('active-select-p1');
+        const title = document.getElementById("selectTitle");
+        title.innerText = "P2: SELECT FIGHTER";
+        title.style.color = "#e74c3c";
+    } else if(!p2Choice) {
+        p2Choice = charId;
+        document.getElementById(`card-${charId}`).classList.add('active-select-p2');
+        isLocked = true;
+        setTimeout(() => {
+            document.getElementById("charSelect").style.display = "none";
+            initBattle();
+        }, 800);
+    }
+}
+
+class Fighter {
+    constructor(cvs, folder) {
+        this.ctx = cvs.getContext("2d");
+        this.imgs = { idle: new Image(), attack: new Image(), hurt: new Image(), dead: new Image() };
+        this.imgs.idle.src = `images/${folder}_idle.png`;
+        this.imgs.attack.src = `images/${folder}_attack.png`;
+        this.imgs.hurt.src = `images/${folder}_hurt.png`;
+        this.imgs.dead.src = `images/${folder}_dead.png`;
+        this.state="idle"; this.frame=0; this.tick=0;
+    }
+    set(s){ this.state=s; this.frame=0; this.tick=0; }
+    update(){
+        this.tick++; if(this.tick%10===0){ this.frame = (this.frame+1)%3; if(this.frame===0 && !["idle","dead"].includes(this.state)) this.state="idle"; }
+    }
+    draw(isP2){
+        this.ctx.clearRect(0,0,320,320);
+        let img = this.imgs[this.state];
+        if(!img.complete) return;
+        this.ctx.save();
+        if(isP2){ this.ctx.translate(320,0); this.ctx.scale(-1,1); }
+        this.ctx.drawImage(img,this.frame*128,0,128,128,40,40,240,240);
+        this.ctx.restore();
+    }
+}
+
+function initBattle() {
+    isLocked = false;
+    shuffleQuestions(questions);
+    fighter1 = new Fighter(document.getElementById("p1Canvas"), p1Choice);
+    fighter2 = new Fighter(document.getElementById("p2Canvas"), p2Choice);
+    bgm.volume=0.2; bgm.play(); loadQuestion(); loop();
+}
+
+function loadQuestion() {
+    if(isGameOver) return;
+    isLocked = false;
+    let data = questions[qIdx % questions.length];
+    let pool = [data.a, data.o1, data.o2].sort(() => Math.random() - 0.5);
+    document.getElementById("question").innerText = data.q;
+    document.getElementById("turnPrompt").innerText = `PLAYER ${turn}'S TURN`;
+    pool.forEach((text, i) => {
+        let b = document.getElementById("btn"+i); b.innerText = text; b.disabled = false;
+        if(text === data.a) correctIdx = i;
+    });
+    updateHUD();
+}
+
+function handleChoice(idx) {
+    if(isLocked || isGameOver) return;
+    isLocked = true;
+    if(idx === correctIdx) {
+        punch.currentTime=0; punch.play();
+        if(turn===1) { p2HP -= 20; fighter1.set("attack"); fighter2.set("hurt"); }
+        else { p1HP -= 20; fighter2.set("attack"); fighter1.set("hurt"); }
+        qIdx++;
+        if(p1HP <= 0 || p2HP <= 0) {
+            isGameOver = true;
+            p1HP <= 0 ? fighter1.set("dead") : fighter2.set("dead");
+            ko.play();
+            setTimeout(() => { 
+                document.getElementById("winnerText").innerText = p1HP <= 0 ? "P2 WINS!" : "P1 WINS!";
+                document.getElementById("winScreen").style.display="flex"; 
+            }, 1200);
+        } else { turn = turn === 1 ? 2 : 1; updateHUD(); setTimeout(loadQuestion, 1000); }
+    } else { 
+        if(turn===1) fighter1.set("hurt"); else fighter2.set("hurt");
+        setTimeout(triggerWrongBanner, 500);
+    }
+}
+
+function updateHUD() {
+    const bars = [ { el: document.getElementById("p1Health"), val: p1HP }, { el: document.getElementById("p2Health"), val: p2HP } ];
+    bars.forEach(bar => {
+        bar.el.style.width = bar.val + "%";
+        bar.el.classList.remove("low-health");
+        if (bar.val > 60) bar.el.style.background = "#2ecc71";
+        else if (bar.val > 30) bar.el.style.background = "#f1c40f";
+        else { bar.el.style.background = "#e74c3c"; bar.el.classList.add("low-health"); }
+    });
+    document.getElementById("p1Canvas").style.filter = turn===1 ? "brightness(1.2) drop-shadow(0 0 10px gold)" : "brightness(0.3)";
+    document.getElementById("p2Canvas").style.filter = turn===2 ? "brightness(1.2) drop-shadow(0 0 10px gold)" : "brightness(0.3)";
+}
+
+function loop() {
+    if(fighter1) { fighter1.update(); fighter1.draw(false); }
+    if(fighter2) { fighter2.update(); fighter2.draw(true); }
+    requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
